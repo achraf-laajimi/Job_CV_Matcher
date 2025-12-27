@@ -1,0 +1,166 @@
+[
+  {
+    "filename": "cv_oussama.pdf",
+    "score": 88,
+    "recommendation": "shortlist",
+    "strengths": [
+      "Relevant experience in building high-performance web and mobile applications with Flutter and NestJS",
+      "Strong backend skills, including expertise in Node.js/Typescript and Python (FastAPI)",
+      "Familiarity with modern frontend libraries such as React"
+    ],
+    "gaps": [
+      "Limited experience with AWS, serverless technologies, or cloud-native development"
+    ],
+    "processing_time": 136.94397401809692,
+    "full_result": {
+      "final_score": 88,
+      "strengths": [
+        "Relevant experience in building high-performance web and mobile applications with Flutter and NestJS",
+        "Strong backend skills, including expertise in Node.js/Typescript and Python (FastAPI)",
+        "Familiarity with modern frontend libraries such as React"
+      ],
+      "gaps": [
+        "Limited experience with AWS, serverless technologies, or cloud-native development"
+      ],
+      "recommendation": "shortlist"
+    }
+  },
+  {
+    "filename": "cv_moatez_tilouch.pdf",
+    "score": 84,
+    "recommendation": "shortlist",
+    "strengths": [
+      "Deep experience in full-stack development with relevant skills such as Angular, Flutter, NestJS, Spring Boot, HTML/CSS, ReactJS, NextJS, SQL/NoSQL.",
+      "Strong backend and frontend development skills as per the job requirements."
+    ],
+    "gaps": [],
+    "processing_time": 114.30787396430969,
+    "full_result": {
+      "final_score": 84,
+      "strengths": [
+        "Deep experience in full-stack development with relevant skills such as Angular, Flutter, NestJS, Spring Boot, HTML/CSS, ReactJS, NextJS, SQL/NoSQL.",
+        "Strong backend and frontend development skills as per the job requirements."
+      ],
+      "gaps": [],
+      "recommendation": "shortlist"
+    }
+  },
+  {
+    "filename": "cv_yassine.pdf",
+    "score": 82,
+    "recommendation": "maybe",
+    "strengths": [
+      "Relevant experience with backend and frontend development",
+      "Technical skills match, including Node.js/TypeScript, Python (FastAPI), React, AWS, and cloud-native development",
+      "Experience with automation workflows, event-driven architecture, and microservices"
+    ],
+    "gaps": [
+      "Limited direct experience with the specific requirements of base360.ai platform",
+      "No clear evidence of working on large-scale operational systems or real-time automations"
+    ],
+    "processing_time": 293.87372636795044,
+    "full_result": {
+      "final_score": 82,
+      "strengths": [
+        "Relevant experience with backend and frontend development",
+        "Technical skills match, including Node.js/TypeScript, Python (FastAPI), React, AWS, and cloud-native development",
+        "Experience with automation workflows, event-driven architecture, and microservices"
+      ],
+      "gaps": [
+        "Limited direct experience with the specific requirements of base360.ai platform",
+        "No clear evidence of working on large-scale operational systems or real-time automations"
+      ],
+      "recommendation": "maybe"
+    }
+  },
+  {
+    "filename": "good_match_cv.pdf",
+    "score": 82,
+    "recommendation": "shortlist",
+    "strengths": [
+      {
+        "category": "Skills match",
+        "score": 90
+      },
+      {
+        "category": "Domain relevance",
+        "score": 80
+      }
+    ],
+    "gaps": [],
+    "processing_time": 124.71569848060608,
+    "full_result": {
+      "final_score": 82,
+      "strengths": [
+        {
+          "category": "Skills match",
+          "score": 90
+        },
+        {
+          "category": "Domain relevance",
+          "score": 80
+        }
+      ],
+      "gaps": [],
+      "recommendation": "shortlist"
+    }
+  },
+  {
+    "filename": "cv_ahmed.pdf",
+    "score": 81.3,
+    "recommendation": "maybe",
+    "strengths": [
+      {
+        "category": "Skills match",
+        "sub_category": "Backend development",
+        "score": 80
+      },
+      {
+        "category": "Experience",
+        "sub_category": "Front-end engineering and development",
+        "score": 85
+      }
+    ],
+    "gaps": [
+      {
+        "category": "Domain relevance",
+        "sub_category": "Automation, system design, and simplifying complexity",
+        "score": 60
+      },
+      {
+        "category": "Skills match",
+        "sub_category": "Node.js / Typescript or similar backend frameworks",
+        "score": 50
+      }
+    ],
+    "processing_time": 146.80484914779663,
+    "full_result": {
+      "final_score": 81.3,
+      "strengths": [
+        {
+          "category": "Skills match",
+          "sub_category": "Backend development",
+          "score": 80
+        },
+        {
+          "category": "Experience",
+          "sub_category": "Front-end engineering and development",
+          "score": 85
+        }
+      ],
+      "gaps": [
+        {
+          "category": "Domain relevance",
+          "sub_category": "Automation, system design, and simplifying complexity",
+          "score": 60
+        },
+        {
+          "category": "Skills match",
+          "sub_category": "Node.js / Typescript or similar backend frameworks",
+          "score": 50
+        }
+      ],
+      "recommendation": "maybe"
+    }
+  }
+]
