@@ -382,20 +382,6 @@ result = run_pipeline_rag(
 
 ---
 
-## 📚 Documentation
-
-Comprehensive documentation is available in the `CV-Job-matching/` directory:
-
-| Document                                                       | Description                         |
-| -------------------------------------------------------------- | ----------------------------------- |
-| [API_USAGE.md](CV-Job-matching/API_USAGE.md)                   | Complete API reference and examples |
-| [RAG_README.md](CV-Job-matching/RAG_README.md)                 | RAG system overview                 |
-| [RAG_QUICKSTART.md](CV-Job-matching/RAG_QUICKSTART.md)         | Quick start guide for RAG           |
-| [RAG_IMPLEMENTATION.md](CV-Job-matching/RAG_IMPLEMENTATION.md) | Detailed implementation guide       |
-| [RAG_ARCHITECTURE.md](CV-Job-matching/RAG_ARCHITECTURE.md)     | Architecture diagrams and flow      |
-| [RAG_SUMMARY.md](CV-Job-matching/RAG_SUMMARY.md)               | Implementation summary              |
-| [OPTIMIZATIONS.md](CV-Job-matching/OPTIMIZATIONS.md)           | Performance optimizations           |
-
 ---
 
 ## ⚡ Performance
