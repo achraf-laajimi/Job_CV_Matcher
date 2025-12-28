@@ -1,11 +1,7 @@
 # app/api/models.py
 """Pydantic models for API requests and responses"""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List, Optional, Union, Any
-
-
-class JobDescription(BaseModel):
-    text: str = Field(..., description="Job description text")
 
 
 class MatchResult(BaseModel):

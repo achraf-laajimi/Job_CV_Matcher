@@ -1,7 +1,17 @@
 # app/agents/cv_parser.py
-import ollama
+from app.utils.ollama_async import chat_async
 
-def parse_cv(cv_text: str):
+
+async def parse_cv_async(cv_text: str):
+    """
+    Extract structured information from CV using LLM.
+    
+    Args:
+        cv_text: Clean CV text
+        
+    Returns:
+        JSON string with structured CV data
+    """
     prompt = f"""
 Extract structured information from the CV.
 Return ONLY valid JSON.
@@ -17,8 +27,8 @@ CV:
 {cv_text}
 """
 
-    res = ollama.chat(
-        model="qwen2.5:7b",
+    res = await chat_async(
+        model="mistral:7b-instruct",
         messages=[{"role": "user", "content": prompt}],
         format="json",
         options={"num_predict": 400}

@@ -1,13 +1,20 @@
 # app/utils/rag.py
 """
 RAG (Retrieval Augmented Generation) utilities for CV-Job matching.
-Implements chunking, embedding, and retrieval to reduce LLM context size.
+Uses fast transformer embeddings instead of Ollama.
 """
 
-import ollama
 import numpy as np
 import re
 from typing import List, Tuple, Dict
+
+from app.embedding.transformer_embedder import (
+    embed_text_sync,
+    embed_chunks_sync,
+    embed_text_async,
+    embed_chunks_async,
+    cosine_similarity
+)
 
 
 def chunk_cv(text: str, max_chars: int = 500) -> List[str]:
@@ -120,59 +127,9 @@ def chunk_jd(text: str, max_chars: int = 500) -> List[str]:
     return chunks
 
 
-def embed_chunks(chunks: List[str], model: str = "nomic-embed-text") -> List[np.ndarray]:
-    """
-    Embed multiple chunks using Ollama.
-    
-    Args:
-        chunks: List of text chunks
-        model: Embedding model to use
-        
-    Returns:
-        List of embedding vectors
-    """
-    embeddings = []
-    
-    for chunk in chunks:
-        response = ollama.embeddings(
-            model=model,
-            prompt=chunk
-        )
-        embeddings.append(np.array(response["embedding"]))
-    
-    return embeddings
-
-
-def embed_text(text: str, model: str = "nomic-embed-text") -> np.ndarray:
-    """
-    Embed a single text using Ollama.
-    
-    Args:
-        text: Text to embed
-        model: Embedding model to use
-        
-    Returns:
-        Embedding vector
-    """
-    response = ollama.embeddings(
-        model=model,
-        prompt=text
-    )
-    return np.array(response["embedding"])
-
-
-def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
-    """
-    Calculate cosine similarity between two vectors.
-    
-    Args:
-        a: First vector
-        b: Second vector
-        
-    Returns:
-        Cosine similarity score (0-1)
-    """
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+# Embedding functions now use transformers (imported from transformer_embedder)
+# embed_text_sync, embed_chunks_sync, embed_text_async, embed_chunks_async
+# are all available and MUCH faster than Ollama
 
 
 def retrieve_relevant_chunks(
@@ -208,76 +165,3 @@ def retrieve_relevant_chunks(
     top_scores = [scores[i] for i in top_indices]
     
     return top_chunks, top_scores
-
-
-def format_retrieved_context(chunks: List[str], scores: List[float]) -> str:
-    """
-    Format retrieved chunks into a readable context string.
-    
-    Args:
-        chunks: Retrieved chunks
-        scores: Similarity scores for each chunk
-        
-    Returns:
-        Formatted context string
-    """
-    context_parts = []
-    
-    for i, (chunk, score) in enumerate(zip(chunks, scores), 1):
-        context_parts.append(f"[Relevant Section {i}] (relevance: {score:.2f})")
-        context_parts.append(chunk)
-        context_parts.append("")  # Empty line
-    
-    return "\n".join(context_parts)
-
-
-def rag_cv_to_jd(
-    cv_text: str,
-    jd_text: str,
-    cv_chunks: List[str] = None,
-    cv_embeddings: List[np.ndarray] = None,
-    top_k: int = 5
-) -> Dict:
-    """
-    RAG pipeline: retrieve relevant CV chunks for a job description.
-    
-    Args:
-        cv_text: Full CV text
-        jd_text: Full JD text
-        cv_chunks: Pre-computed CV chunks (optional)
-        cv_embeddings: Pre-computed CV embeddings (optional)
-        top_k: Number of chunks to retrieve
-        
-    Returns:
-        Dictionary with retrieved chunks, scores, and formatted context
-    """
-    # Chunk CV if not provided
-    if cv_chunks is None:
-        cv_chunks = chunk_cv(cv_text)
-    
-    # Embed CV chunks if not provided
-    if cv_embeddings is None:
-        cv_embeddings = embed_chunks(cv_chunks)
-    
-    # Embed JD
-    jd_embedding = embed_text(jd_text)
-    
-    # Retrieve relevant chunks
-    relevant_chunks, scores = retrieve_relevant_chunks(
-        cv_chunks,
-        cv_embeddings,
-        jd_embedding,
-        top_k=top_k
-    )
-    
-    # Format context
-    formatted_context = format_retrieved_context(relevant_chunks, scores)
-    
-    return {
-        "chunks": relevant_chunks,
-        "scores": scores,
-        "formatted_context": formatted_context,
-        "total_chunks": len(cv_chunks),
-        "retrieved_chunks": len(relevant_chunks),
-        "avg_score": float(np.mean(scores))
-    }

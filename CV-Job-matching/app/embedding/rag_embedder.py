@@ -1,23 +1,33 @@
 # app/embedding/rag_embedder.py
 """
 RAG-optimized CV embedder with caching.
-Handles chunk-based embedding and storage for efficient retrieval.
+Uses fast transformer embeddings (NOT Ollama).
 """
 
 import hashlib
 import numpy as np
 from typing import List, Dict, Tuple, Optional
-from app.utils.rag import chunk_cv, embed_chunks, embed_text
+from app.embedding.transformer_embedder import embed_chunks_sync, embed_text_sync, cosine_similarity
+from app.utils.rag import chunk_cv
 
 
 class RAGEmbedder:
     """
     Manages chunk-based embeddings for CVs with caching support.
+    Now uses sentence-transformers for 5-6x faster embeddings!
     """
     
-    def __init__(self):
-        """Initialize the RAG embedder with in-memory cache."""
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+        """
+        Initialize the RAG embedder with in-memory cache.
+        
+        Args:
+            model_name: Transformer model for embeddings
+                - "all-MiniLM-L6-v2" (90MB, FAST, recommended)
+                - "all-mpnet-base-v2" (420MB, best quality)
+        """
         self._cache: Dict[str, Dict] = {}
+        self.model_name = model_name
     
     def get_cv_hash(self, cv_text: str) -> str:
         """
@@ -38,6 +48,7 @@ class RAGEmbedder:
     ) -> Dict:
         """
         Chunk and embed a CV, with caching.
+        NOW USES FAST TRANSFORMERS (not Ollama).
         
         Args:
             cv_text: Clean CV text
@@ -55,8 +66,8 @@ class RAGEmbedder:
         # Chunk the CV
         chunks = chunk_cv(cv_text)
         
-        # Embed chunks
-        embeddings = embed_chunks(chunks)
+        # Embed chunks using fast transformer (NOT Ollama)
+        embeddings = embed_chunks_sync(chunks, self.model_name)
         
         # Store in cache
         result = {
@@ -103,8 +114,8 @@ class RAGEmbedder:
         """
         from app.utils.rag import retrieve_relevant_chunks
         
-        # Embed JD
-        jd_embedding = embed_text(jd_text)
+        # Embed JD using fast transformer (NOT Ollama)
+        jd_embedding = embed_text_sync(jd_text, self.model_name)
         
         # Retrieve relevant chunks
         relevant_chunks, scores = retrieve_relevant_chunks(
@@ -116,36 +127,6 @@ class RAGEmbedder:
         
         return relevant_chunks, scores, jd_embedding
     
-    def get_similarity_score(
-        self,
-        cv_embeddings: List[np.ndarray],
-        jd_embedding: np.ndarray
-    ) -> float:
-        """
-        Calculate overall similarity between CV and JD.
-        Uses max pooling over chunk similarities.
-        
-        Args:
-            cv_embeddings: List of CV chunk embeddings
-            jd_embedding: JD embedding
-            
-        Returns:
-            Similarity score (0-100)
-        """
-        from app.utils.rag import cosine_similarity
-        
-        # Calculate similarity for each chunk
-        similarities = [
-            cosine_similarity(cv_emb, jd_embedding)
-            for cv_emb in cv_embeddings
-        ]
-        
-        # Use max similarity (best match)
-        # Alternative: could use mean or weighted average
-        max_similarity = max(similarities) if similarities else 0.0
-        
-        return round(max_similarity * 100, 1)
-    
     def clear_cache(self):
         """Clear the embedding cache."""
         self._cache.clear()
@@ -153,22 +134,6 @@ class RAGEmbedder:
     def cache_size(self) -> int:
         """Get number of cached CVs."""
         return len(self._cache)
-    
-    def remove_from_cache(self, cv_text: str) -> bool:
-        """
-        Remove a CV from cache.
-        
-        Args:
-            cv_text: Clean CV text
-            
-        Returns:
-            True if removed, False if not in cache
-        """
-        cv_hash = self.get_cv_hash(cv_text)
-        if cv_hash in self._cache:
-            del self._cache[cv_hash]
-            return True
-        return False
 
 
 # Global instance for use across the application

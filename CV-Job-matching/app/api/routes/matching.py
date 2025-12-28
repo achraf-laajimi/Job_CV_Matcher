@@ -1,5 +1,5 @@
 # app/api/routes/matching.py
-"""CV matching endpoints"""
+"""CV matching endpoints - Optimized with async"""
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
 from typing import List
 import json
@@ -7,7 +7,7 @@ import os
 import tempfile
 import time
 
-from app.pipeline import run_pipeline, run_pipeline_rag
+from app.pipeline import run_pipeline_rag_async
 from app.api.models import MatchResult, RankingResult, BulkRankingResponse
 
 router = APIRouter(prefix="", tags=["Matching"])
@@ -26,10 +26,7 @@ async def match_single_cv(
     - Chunks CV into sections
     - Retrieves only relevant parts
     - 70-90% faster with better accuracy
-    
-    Legacy mode (use_rag=False):
-    - Uses full CV text
-    - Slower but comprehensive
+    - ASYNC: All operations run in parallel for maximum speed
     
     Returns score, recommendation, strengths, and gaps
     """
@@ -44,15 +41,11 @@ async def match_single_cv(
         tmp_path = tmp_file.name
     
     try:
-        # Process CV
+        # Process CV with ASYNC pipeline
         start_time = time.time()
         
-        if use_rag:
-            # RAG pipeline (recommended)
-            result = run_pipeline_rag(tmp_path, job_description, top_k=5)
-        else:
-            # Legacy pipeline
-            result = run_pipeline(tmp_path, job_description)
+        # Always use ASYNC RAG pipeline
+        result = await run_pipeline_rag_async(tmp_path, job_description, top_k=5)
         
         processing_time = time.time() - start_time
         
@@ -89,6 +82,7 @@ async def rank_multiple_cvs(
     - Much faster for bulk processing
     - CV embeddings cached across requests
     - 2-4x speedup
+    - ASYNC: Each CV processed with parallel operations
     
     Returns sorted list of candidates with scores and recommendations
     """
@@ -114,15 +108,11 @@ async def rank_multiple_cvs(
             tmp_path = tmp_file.name
         
         try:
-            # Process CV
+            # Process CV with ASYNC pipeline
             start_time = time.time()
             
-            if use_rag:
-                # RAG pipeline (recommended for bulk)
-                result = run_pipeline_rag(tmp_path, job_description, top_k=5)
-            else:
-                # Legacy pipeline
-                result = run_pipeline(tmp_path, job_description)
+            # Always use ASYNC RAG pipeline
+            result = await run_pipeline_rag_async(tmp_path, job_description, top_k=5)
             
             processing_time = time.time() - start_time
             
@@ -145,7 +135,7 @@ async def rank_multiple_cvs(
                 score=0,
                 recommendation='error',
                 strengths=[],
-                gaps=[{'error': str(e)}],
+                gaps=[f'Error: {str(e)}'],
                 processing_time=0
             ))
         

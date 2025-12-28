@@ -1,16 +1,30 @@
 # app/pipeline.py
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
+import logging
+import time
 from app.extract.pdf_extractor import extract_pdf_text
 from app.extract.cleaner import clean_text
-from app.agents.cv_parser import parse_cv
-from app.agents.jd_parser import parse_jd
-from app.embedding.similarity import embedding_score, embedding_score_rag
-from app.agents.scorer import score_cv, score_cv_rag
+from app.agents.cv_parser import parse_cv_async
+from app.agents.jd_parser import parse_jd_async
+from app.embedding.transformer_embedder import embedding_score_rag
+from app.agents.scorer import score_cv_rag_async
 from app.utils.cache import CVCache
 from app.utils.text_trimmer import trim_cv, trim_jd
 from app.embedding.rag_embedder import get_rag_embedder
-from app.utils.rag import chunk_jd
+from app.utils.rag import chunk_jd, retrieve_relevant_chunks
+from app.embedding.transformer_embedder import embed_chunks_async, embed_text_async
+
+# Setup logger with proper configuration
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Create console handler if not already present
+if not logger.handlers:
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(message)s')
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
 
 # Global cache instance
 _cache = CVCache()
@@ -18,122 +32,23 @@ _cache = CVCache()
 # Global RAG embedder
 _rag_embedder = get_rag_embedder()
 
-def run_pipeline(cv_path, jd_text):
-    """
-    Optimized pipeline with:
-    - CV caching
-    - Text trimming
-    - Parallel processing
-    - Token limits
-    
-    LEGACY: Uses full documents (not recommended for large CVs)
-    """
-    # 1. Extract and clean
-    cv_raw = extract_pdf_text(cv_path)
-    cv_clean = clean_text(cv_raw)
-    jd_clean = clean_text(jd_text)
-    
-    # 2. Check cache
-    cv_hash = _cache.get_hash(cv_clean)
-    cached_cv = _cache.get(cv_hash)
-    
-    # 3. Trim text for faster LLM processing
-    cv_trimmed = trim_cv(cv_clean)
-    jd_trimmed = trim_jd(jd_clean)
-    
-    # 4. Parallel processing using ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        # Parse CV (or use cache)
-        if cached_cv and "parsed" in cached_cv:
-            cv_json = cached_cv["parsed"]
-            future_cv = None
-        else:
-            future_cv = executor.submit(parse_cv, cv_trimmed)
-        
-        # Parse JD and calculate embedding in parallel
-        future_jd = executor.submit(parse_jd, jd_trimmed)
-        future_emb = executor.submit(embedding_score, cv_clean, jd_clean)
-        
-        # Wait for results
-        cv_json = cv_json if cached_cv and "parsed" in cached_cv else future_cv.result()
-        jd_json = future_jd.result()
-        sim_score = future_emb.result()
-    
-    # 5. Cache CV results
-    if not cached_cv:
-        _cache.set(cv_hash, {
-            "parsed": cv_json,
-            "clean_text": cv_clean
-        })
-    
-    # 6. Score
-    return score_cv(cv_json, jd_json, sim_score)
-
-
-def run_pipeline_async(cv_path, jd_text):
-    """
-    Async version for even better performance with many CVs
-    """
-    async def process():
-        # Extract and clean
-        cv_raw = extract_pdf_text(cv_path)
-        cv_clean = clean_text(cv_raw)
-        jd_clean = clean_text(jd_text)
-        
-        # Check cache
-        cv_hash = _cache.get_hash(cv_clean)
-        cached_cv = _cache.get(cv_hash)
-        
-        # Trim text
-        cv_trimmed = trim_cv(cv_clean)
-        jd_trimmed = trim_jd(jd_clean)
-        
-        # Run in parallel
-        loop = asyncio.get_event_loop()
-        
-        if cached_cv and "parsed" in cached_cv:
-            cv_task = asyncio.create_task(asyncio.sleep(0))
-            cv_json = cached_cv["parsed"]
-        else:
-            cv_task = loop.run_in_executor(None, parse_cv, cv_trimmed)
-        
-        jd_task = loop.run_in_executor(None, parse_jd, jd_trimmed)
-        emb_task = loop.run_in_executor(None, embedding_score, cv_clean, jd_clean)
-        
-        if not (cached_cv and "parsed" in cached_cv):
-            cv_json = await cv_task
-        await jd_task
-        await emb_task
-        
-        jd_json = jd_task.result() if hasattr(jd_task, 'result') else await jd_task
-        sim_score = emb_task.result() if hasattr(emb_task, 'result') else await emb_task
-        
-        # Cache
-        if not cached_cv:
-            _cache.set(cv_hash, {
-                "parsed": cv_json,
-                "clean_text": cv_clean
-            })
-        
-        return score_cv(cv_json, jd_json, sim_score)
-    
-    return asyncio.run(process())
-
 
 def clear_cache():
     """Clear all cached CV data"""
     _cache.clear()
 
 
-def run_pipeline_rag(cv_path, jd_text, top_k=5):
+async def run_pipeline_rag_async(cv_path, jd_text, top_k=5):
     """
-    RAG-optimized pipeline with:
-    - CV chunking & embedding (cached)
-    - Retrieval of top K relevant chunks
-    - Reduced LLM context (70-90% smaller)
-    - Better performance & accuracy
+    FULLY ASYNC RAG pipeline - MAXIMUM PERFORMANCE.
     
-    RECOMMENDED: Use this for production
+    Optimizations:
+    - Parallel chunk embedding (all chunks at once)
+    - Concurrent CV+JD parsing
+    - RAG retrieval (70-90% context reduction)
+    - No ThreadPoolExecutor overhead
+    
+    RECOMMENDED: Use this for production.
     
     Args:
         cv_path: Path to CV PDF
@@ -143,53 +58,100 @@ def run_pipeline_rag(cv_path, jd_text, top_k=5):
     Returns:
         Scoring result as JSON string
     """
-    # 1. Extract and clean
+    start_total = time.time()
+    logger.info("="*60)
+    logger.info(f"🚀 Starting RAG Pipeline | CV: {cv_path}")
+    
+    # 1. Extract and clean (fast sync operations)
+    logger.info("📄 Step 1: Extracting PDF text...")
+    t1 = time.time()
     cv_raw = extract_pdf_text(cv_path)
     cv_clean = clean_text(cv_raw)
     jd_clean = clean_text(jd_text)
+    logger.info(f"   ✓ Extracted & cleaned | CV: {len(cv_clean)} chars, JD: {len(jd_clean)} chars ({time.time()-t1:.2f}s)")
     
     # 2. Check if CV chunks are cached
+    logger.info("💾 Step 2: Checking cache...")
     cached_cv_data = _rag_embedder.get_cached_cv(cv_clean)
     
     if cached_cv_data:
-        # Use cached chunks and embeddings
+        logger.info(f"   ✓ Cache HIT! Using {cached_cv_data['num_chunks']} cached chunks")
         cv_data = cached_cv_data
     else:
-        # Chunk and embed CV (will be cached)
-        cv_data = _rag_embedder.embed_cv(cv_clean)
+        logger.info("   ⚠ Cache MISS - Processing CV...")
+        # Chunk CV
+        from app.utils.rag import chunk_cv
+        t2 = time.time()
+        chunks = chunk_cv(cv_clean)
+        logger.info(f"   ✓ Chunked CV into {len(chunks)} chunks")
+        
+        # ASYNC: Embed all chunks in PARALLEL using fast transformers
+        logger.info("🔢 Step 3: Embedding CV chunks (async)...")
+        t3 = time.time()
+        embeddings = await embed_chunks_async(chunks)
+        logger.info(f"   ✓ Embedded {len(chunks)} chunks in {time.time()-t3:.2f}s")
+        
+        cv_data = {
+            "chunks": chunks,
+            "embeddings": embeddings,
+            "num_chunks": len(chunks)
+        }
+        
+        # Cache for future use
+        cv_hash = _rag_embedder.get_cv_hash(cv_clean)
+        _rag_embedder._cache[cv_hash] = cv_data
+        logger.info("   ✓ Cached embeddings for reuse")
     
-    # 3. Retrieve relevant CV chunks for this JD
-    relevant_chunks, chunk_scores, jd_embedding = _rag_embedder.retrieve_for_jd(
-        cv_data,
-        jd_clean,
+    # 3. ASYNC: Embed JD using fast transformer
+    logger.info("🔢 Step 4: Embedding job description (async)...")
+    t4 = time.time()
+    jd_embedding = await embed_text_async(jd_clean)
+    logger.info(f"   ✓ Embedded JD in {time.time()-t4:.2f}s")
+    
+    # 4. Retrieve relevant CV chunks (fast, synchronous)
+    logger.info(f"🔍 Step 5: Retrieving top {top_k} relevant chunks...")
+    t5 = time.time()
+    from app.utils.rag import retrieve_relevant_chunks
+    relevant_chunks, chunk_scores = retrieve_relevant_chunks(
+        cv_data["chunks"],
+        cv_data["embeddings"],
+        jd_embedding,
         top_k=top_k
     )
+    logger.info(f"   ✓ Retrieved {len(relevant_chunks)} chunks in {time.time()-t5:.2f}s")
+    logger.info(f"   📊 Scores: {[f'{s:.2f}' for s in chunk_scores]}")
     
-    # 4. Calculate overall similarity score (RAG-based)
+    # 5. Calculate overall similarity score
     sim_score = embedding_score_rag(
         cv_data["embeddings"],
         jd_embedding,
         pooling="max"
     )
+    logger.info(f"   📈 Overall similarity: {sim_score:.1f}/100")
     
-    # 5. Parse CV and JD (use trimmed versions for parsing)
+    # 6. Prepare text for parsing
+    logger.info("✂️ Step 6: Trimming text for LLM...")
     cv_trimmed = trim_cv(cv_clean)
     jd_trimmed = trim_jd(jd_clean)
+    logger.info(f"   ✓ Trimmed | CV: {len(cv_trimmed)} chars, JD: {len(jd_trimmed)} chars")
     
     # Optional: chunk JD for even more optimization
     jd_chunks = chunk_jd(jd_clean, max_chars=400)
     top_jd_chunks = jd_chunks[:3] if len(jd_chunks) > 3 else jd_chunks
     
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        # Parse CV and JD in parallel
-        future_cv = executor.submit(parse_cv, cv_trimmed)
-        future_jd = executor.submit(parse_jd, jd_trimmed)
-        
-        cv_json = future_cv.result()
-        jd_json = future_jd.result()
+    # 7. ASYNC: Parse CV and JD in PARALLEL (KEY OPTIMIZATION!)
+    logger.info("🤖 Step 7: Parsing CV & JD with LLM (parallel async)...")
+    t7 = time.time()
+    cv_json, jd_json = await asyncio.gather(
+        parse_cv_async(cv_trimmed),
+        parse_jd_async(jd_trimmed)
+    )
+    logger.info(f"   ✓ Parsed both in {time.time()-t7:.2f}s")
     
-    # 6. Score using RAG (only relevant chunks sent to LLM)
-    return score_cv_rag(
+    # 8. ASYNC: Score using RAG
+    logger.info("🎯 Step 8: Scoring match with LLM...")
+    t8 = time.time()
+    result = await score_cv_rag_async(
         cv_json=cv_json,
         jd_json=jd_json,
         relevant_cv_chunks=relevant_chunks,
@@ -197,3 +159,14 @@ def run_pipeline_rag(cv_path, jd_text, top_k=5):
         similarity_score=sim_score,
         jd_chunks=top_jd_chunks
     )
+    logger.info(f"   ✓ Scored in {time.time()-t8:.2f}s")
+    
+    total_time = time.time() - start_total
+    logger.info(f"✅ Pipeline Complete | Total: {total_time:.2f}s")
+    logger.info("="*60)
+    
+    return result
+
+
+# Legacy sync version with ThreadPoolExecutor (not recommended)
+
